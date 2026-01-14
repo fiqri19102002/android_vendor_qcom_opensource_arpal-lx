@@ -37,6 +37,9 @@
 #include "Session.h"
 #include "kvh2xml.h"
 #include "SessionAlsaPcm.h"
+#ifdef AUDIO_SUPPORT_AW882XX
+#include "aw_ar_api.h"
+#endif
 #include "ResourceManager.h"
 #include "Device.h"
 #include <unistd.h>
@@ -675,6 +678,42 @@ session_fail:
             status = devStatus;
     }
 exit:
+#ifdef AUDIO_SUPPORT_AW882XX
+    /*awinic add start*/
+    struct mixer *virtMixer;
+    struct mixer *hwMixer;
+    struct aw_dev_info dev_info;
+    struct pal_device_info devinfo;
+    int32_t ret = 0;
+
+    if (rm->isDeviceAvailable(mDevices, PAL_DEVICE_OUT_SPEAKER)) {
+        ret = rm->getVirtualAudioMixer(&virtMixer);
+        if (ret) {
+            PAL_ERR(LOG_TAG,"virt mixer error %d", ret);
+            goto exit_aw;
+        }
+
+        ret = rm->getHwAudioMixer(&hwMixer);
+        if (ret) {
+            PAL_ERR(LOG_TAG,"hw mixer error %d", ret);
+            goto exit_aw;
+        }
+
+        dev_info.virt_mixer = virtMixer;
+        dev_info.hw_mixer = hwMixer;
+        rm->getDeviceInfo(PAL_DEVICE_OUT_SPEAKER, PAL_STREAM_PROXY, "", &devinfo);
+
+        ret = aw_audioreach_dsp_set_offset(&dev_info, devinfo.channels);
+        if (ret < 0) {
+            PAL_ERR(LOG_TAG, "Awinic set offset failed");
+            goto exit_aw;
+        }
+
+        PAL_INFO(LOG_TAG, "Awinic set offset success");
+    }
+exit_aw:
+    /*awinic add end*/
+#endif
     PAL_DBG(LOG_TAG, "Exit. state %d, status %d", currentState, status);
     mStreamMutex.unlock();
     return status;

@@ -178,6 +178,11 @@ class SpeakerFeedback : public Device
     struct pal_device mDeviceAttr;
     static std::shared_ptr<Device> obj;
     static int numSpeaker;
+#ifdef AUDIO_SUPPORT_AW882XX
+    // awinic add for sp begin
+    bool isWsaAmp;
+    // awinic add for sp end
+#endif
     public :
     int32_t start();
     int32_t stop();

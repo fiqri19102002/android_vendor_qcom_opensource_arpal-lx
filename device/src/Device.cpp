@@ -59,6 +59,9 @@
 #ifdef EC_REF_CAPTURE_ENABLED
 #include "ECRefDevice.h"
 #endif
+#ifdef AUDIO_SUPPORT_AW882XX
+#include "aw_ar_api.h"
+#endif
 #define MAX_CHANNEL_SUPPORTED 2
 #define DEFAULT_OUTPUT_SAMPLING_RATE 48000
 #define DEFAULT_OUTPUT_CHANNEL 2
@@ -248,6 +251,10 @@ std::shared_ptr<Device> Device::getObject(pal_device_id_t dev_id)
 Device::Device(struct pal_device *device, std::shared_ptr<ResourceManager> Rm)
 {
     rm = Rm;
+#ifdef AUDIO_SUPPORT_AW882XX
+    struct aw_dev_info dev_info;
+    int status = 0;
+#endif
 
     memset(&deviceAttr, 0, sizeof(struct pal_device));
     ar_mem_cpy(&deviceAttr, sizeof(struct pal_device), device,
@@ -259,6 +266,24 @@ Device::Device(struct pal_device *device, std::shared_ptr<ResourceManager> Rm)
     strlcpy(mSndDeviceName, "", DEVICE_NAME_MAX_SIZE);
     mCurrentPriority = MIN_USECASE_PRIORITY;
     PAL_DBG(LOG_TAG,"device instance for id %d created", device->id);
+
+#ifdef AUDIO_SUPPORT_AW882XX
+    if (device->id == PAL_DEVICE_OUT_SPEAKER) {
+        status = rm->getVirtualAudioMixer(&dev_info.virt_mixer);
+        if (status) {
+            PAL_ERR(LOG_TAG,"Awinic virt mixer error %d", status);
+            return;
+        }
+
+        status = rm->getHwAudioMixer(&dev_info.hw_mixer);
+        if (status) {
+            PAL_ERR(LOG_TAG,"Awinic hw mixer error %d", status);
+            return;
+        }
+
+        aw_audioreach_monitor_init(&dev_info);
+    }
+#endif
 
 }
 
@@ -278,6 +303,12 @@ Device::~Device()
     customPayloadSize = 0;
     mCurrentPriority = MIN_USECASE_PRIORITY;
     PAL_DBG(LOG_TAG,"device instance for id %d destroyed", deviceAttr.id);
+
+#ifdef AUDIO_SUPPORT_AW882XX
+    if (this->deviceAttr.id == PAL_DEVICE_OUT_SPEAKER) {
+        aw_audioreach_monitor_deinit();
+    }
+#endif
 }
 
 int Device::getDeviceAttributes(struct pal_device *dattr, Stream* streamHandle)
@@ -524,6 +555,11 @@ int Device::start()
     status = start_l();
     mDeviceMutex.unlock();
 
+#ifdef AUDIO_SUPPORT_AW882XX
+    if (this->deviceAttr.id == PAL_DEVICE_OUT_SPEAKER) {
+        aw_audioreach_monitor_start();
+    }
+#endif
     return status;
 }
 
@@ -590,6 +626,11 @@ int Device::stop()
     status = stop_l();
     mDeviceMutex.unlock();
 
+#ifdef AUDIO_SUPPORT_AW882XX
+    if (this->deviceAttr.id == PAL_DEVICE_OUT_SPEAKER) {
+        aw_audioreach_monitor_stop();
+    }
+#endif
     return status;
 }
 

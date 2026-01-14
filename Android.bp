@@ -11,7 +11,10 @@ cc_library_headers {
         "session/inc",
         "stream/inc",
         "utils/inc",
-    ],
+    ] + select(soong_config_variable("qtiaudio", "support_aw882xx"), {
+        "true": ["device/awinic_ar/inc"],
+        default: [],
+    }),
 }
 
 cc_library_shared {
@@ -35,6 +38,9 @@ cc_library_shared {
         "-Wno-unused-variable",
     ] + select(soong_config_variable("qtiaudio", "cirrus_calibration_resistance"), {
         "true": ["-DAUDIO_CIRRUS_CALIBRATION_RESISTANCE"],
+        default: [],
+    }) + select(soong_config_variable("qtiaudio", "support_aw882xx"), {
+        "true": ["-DAUDIO_SUPPORT_AW882XX"],
         default: [],
     }) + select(soong_config_variable("qtiaudio", "feature_ec_ref_capture"), {
         "true": ["-DEC_REF_CAPTURE_ENABLED"],
@@ -110,6 +116,11 @@ cc_library_shared {
     ] + select(soong_config_variable("qtiaudio", "feature_ec_ref_capture"), {
         "true": ["device/src/ECRefDevice.cpp"],
         default: [],
+    }) + select(soong_config_variable("qtiaudio", "support_aw882xx"), {
+        "true": ["device/awinic_ar/src/aw_ar_dsp.cpp",
+                 "device/awinic_ar/src/aw_ar_kmsg.c",
+                 "device/awinic_ar/src/aw_ar_monitor.c"],
+        default: [],
     }),
 
     export_include_dirs: ["inc"],
@@ -165,5 +176,36 @@ cc_library_shared {
     shared_libs: [
         "libcutils",
         "liblog",
+    ],
+}
+
+cc_library_shared {
+    name: "aw882xx_cali",
+    defaults: [
+        "android_hardware_qtiaudio_config_defaults",
+    ],
+    owner: "qti",
+    vendor: true,
+
+    cflags: [
+        "-Wno-tautological-compare",
+        "-Wno-macro-redefined",
+        "-DAW_BACK_END_NAME=\"TDM-LPAIF-RX-TERTIARY-VIRT-0\"",
+        "-DAW_PCM_NAME_LIST=\"PCM100,PCM101,PCM102,PCM103,PCM104,COMPRESS105,VOICEMMODE1p,VOICEMMODE2p,VOICEMMODE1c,VOICEMMODE2c,PCM110,PCM111,PCM112,PCM113,PCM114,PCM115,PCM116,PCM117,PCM118,PCM119,PCM120,PCM121,ExtEC122,PCM123\"",
+    ],
+
+    srcs: [
+        "device/awinic_ar/src/aw_ar_cali.c",
+        "device/awinic_ar/src/aw_ar_cali_exe.c",
+        "device/awinic_ar/src/aw_ar_dsp.cpp",
+        "device/awinic_ar/src/aw_ar_kmsg.c",
+    ],
+
+    local_include_dirs: ["device/awinic_ar/inc"],
+
+    shared_libs: [
+        "libtinyalsa",
+        "liblog",
+        "libcutils",
     ],
 }

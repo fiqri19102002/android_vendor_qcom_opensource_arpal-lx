@@ -40,6 +40,9 @@
 #include "SessionAlsaUtils.h"
 #include "kvh2xml.h"
 #include <agm/agm_api.h>
+#ifdef AUDIO_SUPPORT_AW882XX
+#include "aw_ar_api.h"
+#endif
 
 #include<fstream>
 #include<sstream>
@@ -2114,6 +2117,11 @@ SpeakerProtection::SpeakerProtection(struct pal_device *device,
     spkrProcessingState = SPKR_PROCESSING_IN_IDLE;
 
     isSpkrInUse = false;
+#ifdef AUDIO_SUPPORT_AW882XX
+    // awinic add for sp begin
+    isWsaAmp = false;
+    // awinic add for sp end
+#endif
 
     if (device->id == PAL_DEVICE_OUT_HANDSET) {
         vi_device.channels = 1;
@@ -2155,17 +2163,27 @@ SpeakerProtection::SpeakerProtection(struct pal_device *device,
         PAL_ERR(LOG_TAG,"hw mixer error %d", status);
     }
 
-    fp = fopen(PAL_SP_TEMP_PATH, "rb");
-    if (fp) {
-        PAL_DBG(LOG_TAG, "Cal File exists. Reading from it");
-        spkrCalState = SPKR_CALIBRATED;
+#ifdef AUDIO_SUPPORT_AW882XX
+    // awinic add for sp begin
+    if (isWsaAmp) {  //add this before fopen PAL_SP_TEMP_PATH
+    // awinic add for sp end
+#endif
+        fp = fopen(PAL_SP_TEMP_PATH, "rb");
+        if (fp) {
+            PAL_DBG(LOG_TAG, "Cal File exists. Reading from it");
+            spkrCalState = SPKR_CALIBRATED;
+        }
+        else {
+            PAL_DBG(LOG_TAG, "Calibration Not done");
+            mCalThread = std::thread(&SpeakerProtection::spkrCalibrationThread,
+                                this);
+            calThrdCreated = true;
+        }
+#ifdef AUDIO_SUPPORT_AW882XX
+    // awinic add for sp begin
     }
-    else {
-        PAL_DBG(LOG_TAG, "Calibration Not done");
-        mCalThread = std::thread(&SpeakerProtection::spkrCalibrationThread,
-                            this);
-        calThrdCreated = true;
-    }
+    // awinic add for sp end
+#endif
 
 error_exit:
     if (status != 0) {
@@ -3247,183 +3265,193 @@ int SpeakerProtection::viTxSetupThreadLoop()
         flags = PCM_IN;
 
         //Setting the mode of VI module
-        modeConfg.num_speakers = numberOfChannels;
-        switch (rm->mSpkrProtModeValue.operationMode) {
-            case PAL_SP_MODE_FACTORY_TEST:
-                modeConfg.th_operation_mode = FACTORY_TEST_MODE;
-            break;
-            case PAL_SP_MODE_V_VALIDATION:
-                modeConfg.th_operation_mode = V_VALIDATION_MODE;
-            break;
-            case PAL_SP_MODE_DYNAMIC_CAL:
-            default:
-                PAL_INFO(LOG_TAG, "Normal mode being used");
-                modeConfg.th_operation_mode = NORMAL_MODE;
-        }
-        modeConfg.th_quick_calib_flag = 0;
-
-        ret = SessionAlsaUtils::getModuleInstanceId(virtMixer, pcmDevIdTx.at(0),
-                        backEndName.c_str(), MODULE_VI, &miid);
-        if (ret != 0) {
-            PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", MODULE_VI,
-                                                            ret);
-            goto free_fe;
-        }
-
-        viCustomPayloadSize = 0;
-        viCustomPayload = NULL;
-
-        builder->payloadSPConfig(&payload, &payloadSize, miid,
-                                PARAM_ID_SP_VI_OP_MODE_CFG, (void*)&modeConfg);
-        if (payloadSize) {
-            ret = updateVICustomPayload(payload, payloadSize);
-            free(payload);
-            if (ret != 0) {
-                PAL_ERR(LOG_TAG," updateVICustomPayload Failed for VI_OP_MODE_CFG\n");
-                // Not fatal as by default VI module runs in Normal mode
-                ret = 0;
-            }
-        }
-
-        // Setting Channel Map configuration for VI module
-        // TODO: Move this to ACDB file
-        viChannelMapConfg.num_ch = numberOfChannels * 2;
-        payloadSize = 0;
-
-        builder->payloadSPConfig(&payload, &payloadSize, miid,
-                PARAM_ID_SP_VI_CHANNEL_MAP_CFG,(void *)&viChannelMapConfg);
-        if (payloadSize) {
-            ret = updateVICustomPayload(payload, payloadSize);
-            free(payload);
-            if (0 != ret) {
-                PAL_ERR(LOG_TAG," updateVICustomPayload Failed for CHANNEL_MAP_CFG\n");
-            }
-        }
-
-        // Setting Excursion mode
-        if (rm->mSpkrProtModeValue.operationMode == PAL_SP_MODE_FACTORY_TEST)
-            viExModeConfg.ex_FTM_mode_enable_flag = 1; // FTM Mode
-        else
-            viExModeConfg.ex_FTM_mode_enable_flag = 0; // Normal Mode
-        payloadSize = 0;
-
-        builder->payloadSPConfig(&payload, &payloadSize, miid,
-                PARAM_ID_SP_EX_VI_MODE_CFG,(void *)&viExModeConfg);
-        if (payloadSize) {
-            ret = updateVICustomPayload(payload, payloadSize);
-            free(payload);
-            if (0 != ret) {
-                PAL_ERR(LOG_TAG," updateVICustomPayload Failed for EX_VI_MODE_CFG\n");
-                ret = 0;
-            }
-        }
-
-        if (rm->mSpkrProtModeValue.operationMode) {
-            PAL_DBG(LOG_TAG, "Operation mode %d", rm->mSpkrProtModeValue.operationMode);
-            param_id_sp_th_vi_ftm_cfg_t viFtmConfg;
-            viFtmConfg.num_ch = numberOfChannels;
+#ifdef AUDIO_SUPPORT_AW882XX
+        // awinic add for sp begin
+        if (isWsaAmp) {
+        // awinic add for sp end
+#endif
+            modeConfg.num_speakers = numberOfChannels;
             switch (rm->mSpkrProtModeValue.operationMode) {
                 case PAL_SP_MODE_FACTORY_TEST:
-                    viParamId = PARAM_ID_SP_TH_VI_FTM_CFG;
-                    payloadSize = 0;
-                    builder->payloadSPConfig (&payload, &payloadSize, miid,
-                            viParamId, (void *) &viFtmConfg);
-                    if (payloadSize) {
-                        ret = updateVICustomPayload(payload, payloadSize);
-                        free(payload);
-                        if (0 != ret) {
-                            PAL_ERR(LOG_TAG," Payload Failed for FTM mode\n");
-                        }
-                    }
-                    viParamId = PARAM_ID_SP_EX_VI_FTM_CFG;
-                    payloadSize = 0;
-                    builder->payloadSPConfig (&payload, &payloadSize, miid,
-                            viParamId, (void *) &viFtmConfg);
-                    if (payloadSize) {
-                        ret = updateVICustomPayload(payload, payloadSize);
-                        free(payload);
-                        if (0 != ret) {
-                            PAL_ERR(LOG_TAG," Payload Failed for FTM mode\n");
-                        }
-                    }
+                    modeConfg.th_operation_mode = FACTORY_TEST_MODE;
                 break;
                 case PAL_SP_MODE_V_VALIDATION:
-                    viParamId = PARAM_ID_SP_TH_VI_V_VALI_CFG;
-                    payloadSize = 0;
-                    builder->payloadSPConfig (&payload, &payloadSize, miid,
-                            viParamId, (void *) &viFtmConfg);
-                    if (payloadSize) {
-                        ret = updateVICustomPayload(payload, payloadSize);
-                        free(payload);
-                        if (0 != ret) {
-                            PAL_ERR(LOG_TAG," Payload Failed for FTM mode\n");
-                        }
-                    }
+                    modeConfg.th_operation_mode = V_VALIDATION_MODE;
                 break;
                 case PAL_SP_MODE_DYNAMIC_CAL:
-                    PAL_ERR(LOG_TAG, "Dynamic cal in Processing mode!!");
-                break;
+                default:
+                    PAL_INFO(LOG_TAG, "Normal mode being used");
+                    modeConfg.th_operation_mode = NORMAL_MODE;
             }
-        }
+            modeConfg.th_quick_calib_flag = 0;
 
-        // Setting the R0T0 values
-        PAL_DBG(LOG_TAG, "Read R0T0 from file");
-        fp = fopen(PAL_SP_TEMP_PATH, "rb");
-        if (fp) {
-            for (int i = 0; i < numberOfChannels; i++) {
-                fread(&r0t0Array[i].r0_cali_q24,
-                        sizeof(r0t0Array[i].r0_cali_q24), 1, fp);
-                fread(&r0t0Array[i].t0_cali_q6,
-                        sizeof(r0t0Array[i].t0_cali_q6), 1, fp);
-            }
-            fclose(fp);
-        } else {
-            PAL_DBG(LOG_TAG, "Speaker not calibrated. Send safe values");
-            for (int i = 0; i < numberOfChannels; i++) {
-                r0t0Array[i].r0_cali_q24 = MIN_RESISTANCE_SPKR_Q24;
-                r0t0Array[i].t0_cali_q6 = SAFE_SPKR_TEMP_Q6;
-            }
-        }
-        spR0T0confg = (param_id_sp_th_vi_r0t0_cfg_t*)calloc(1,
-                            sizeof(param_id_sp_th_vi_r0t0_cfg_t) +
-                            sizeof(vi_r0t0_cfg_t) * numberOfChannels);
-
-        if (!spR0T0confg) {
-            PAL_ERR(LOG_TAG," unable to create speaker config payload\n");
-            goto free_fe;
-        }
-        spR0T0confg->num_ch = numberOfChannels;
-
-        for (int i = 0; i < numberOfChannels; i++) {
-            spR0T0confg->r0t0_cfg[i].r0_cali_q24 = r0t0Array[i].r0_cali_q24;
-            spR0T0confg->r0t0_cfg[i].t0_cali_q6 = r0t0Array[i].t0_cali_q6;
-            PAL_DBG (LOG_TAG,"R0 %x ", spR0T0confg->r0t0_cfg[i].r0_cali_q24);
-            PAL_DBG (LOG_TAG,"T0 %x ", spR0T0confg->r0t0_cfg[i].t0_cali_q6);
-
-        }
-
-        payloadSize = 0;
-        builder->payloadSPConfig(&payload, &payloadSize, miid,
-                PARAM_ID_SP_TH_VI_R0T0_CFG,(void *)spR0T0confg);
-        if (payloadSize) {
-            ret = updateVICustomPayload(payload, payloadSize);
-            free(payload);
-            free(spR0T0confg);
-            if (0 != ret) {
-                PAL_ERR(LOG_TAG," updateVICustomPayload Failed\n");
-                ret = 0;
-            }
-        }
-
-        // Setting the values for VI module
-        if (customPayloadSize) {
-            ret = SessionAlsaUtils::setDeviceCustomPayload(rm, backEndName,
-                            viCustomPayload, viCustomPayloadSize);
-            if (ret) {
-                PAL_ERR(LOG_TAG, "Unable to set custom param for mode");
+            ret = SessionAlsaUtils::getModuleInstanceId(virtMixer, pcmDevIdTx.at(0),
+                            backEndName.c_str(), MODULE_VI, &miid);
+            if (ret != 0) {
+                PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", MODULE_VI,
+                                                                ret);
                 goto free_fe;
             }
-        }
+
+            viCustomPayloadSize = 0;
+            viCustomPayload = NULL;
+
+            builder->payloadSPConfig(&payload, &payloadSize, miid,
+                                    PARAM_ID_SP_VI_OP_MODE_CFG, (void*)&modeConfg);
+            if (payloadSize) {
+                ret = updateVICustomPayload(payload, payloadSize);
+                free(payload);
+                if (ret != 0) {
+                    PAL_ERR(LOG_TAG," updateVICustomPayload Failed for VI_OP_MODE_CFG\n");
+                    // Not fatal as by default VI module runs in Normal mode
+                    ret = 0;
+                }
+            }
+
+            // Setting Channel Map configuration for VI module
+            // TODO: Move this to ACDB file
+            viChannelMapConfg.num_ch = numberOfChannels * 2;
+            payloadSize = 0;
+
+            builder->payloadSPConfig(&payload, &payloadSize, miid,
+                    PARAM_ID_SP_VI_CHANNEL_MAP_CFG,(void *)&viChannelMapConfg);
+            if (payloadSize) {
+                ret = updateVICustomPayload(payload, payloadSize);
+                free(payload);
+                if (0 != ret) {
+                    PAL_ERR(LOG_TAG," updateVICustomPayload Failed for CHANNEL_MAP_CFG\n");
+                }
+            }
+
+            // Setting Excursion mode
+            if (rm->mSpkrProtModeValue.operationMode == PAL_SP_MODE_FACTORY_TEST)
+                viExModeConfg.ex_FTM_mode_enable_flag = 1; // FTM Mode
+            else
+                viExModeConfg.ex_FTM_mode_enable_flag = 0; // Normal Mode
+            payloadSize = 0;
+
+            builder->payloadSPConfig(&payload, &payloadSize, miid,
+                    PARAM_ID_SP_EX_VI_MODE_CFG,(void *)&viExModeConfg);
+            if (payloadSize) {
+                ret = updateVICustomPayload(payload, payloadSize);
+                free(payload);
+                if (0 != ret) {
+                    PAL_ERR(LOG_TAG," updateVICustomPayload Failed for EX_VI_MODE_CFG\n");
+                    ret = 0;
+                }
+            }
+
+            if (rm->mSpkrProtModeValue.operationMode) {
+                PAL_DBG(LOG_TAG, "Operation mode %d", rm->mSpkrProtModeValue.operationMode);
+                param_id_sp_th_vi_ftm_cfg_t viFtmConfg;
+                viFtmConfg.num_ch = numberOfChannels;
+                switch (rm->mSpkrProtModeValue.operationMode) {
+                    case PAL_SP_MODE_FACTORY_TEST:
+                        viParamId = PARAM_ID_SP_TH_VI_FTM_CFG;
+                        payloadSize = 0;
+                        builder->payloadSPConfig (&payload, &payloadSize, miid,
+                                viParamId, (void *) &viFtmConfg);
+                        if (payloadSize) {
+                            ret = updateVICustomPayload(payload, payloadSize);
+                            free(payload);
+                            if (0 != ret) {
+                                PAL_ERR(LOG_TAG," Payload Failed for FTM mode\n");
+                            }
+                        }
+                        viParamId = PARAM_ID_SP_EX_VI_FTM_CFG;
+                        payloadSize = 0;
+                        builder->payloadSPConfig (&payload, &payloadSize, miid,
+                                viParamId, (void *) &viFtmConfg);
+                        if (payloadSize) {
+                            ret = updateVICustomPayload(payload, payloadSize);
+                            free(payload);
+                            if (0 != ret) {
+                                PAL_ERR(LOG_TAG," Payload Failed for FTM mode\n");
+                            }
+                        }
+                    break;
+                    case PAL_SP_MODE_V_VALIDATION:
+                        viParamId = PARAM_ID_SP_TH_VI_V_VALI_CFG;
+                        payloadSize = 0;
+                        builder->payloadSPConfig (&payload, &payloadSize, miid,
+                                viParamId, (void *) &viFtmConfg);
+                        if (payloadSize) {
+                            ret = updateVICustomPayload(payload, payloadSize);
+                            free(payload);
+                            if (0 != ret) {
+                                PAL_ERR(LOG_TAG," Payload Failed for FTM mode\n");
+                            }
+                        }
+                    break;
+                    case PAL_SP_MODE_DYNAMIC_CAL:
+                        PAL_ERR(LOG_TAG, "Dynamic cal in Processing mode!!");
+                    break;
+                }
+            }
+
+            // Setting the R0T0 values
+            PAL_DBG(LOG_TAG, "Read R0T0 from file");
+            fp = fopen(PAL_SP_TEMP_PATH, "rb");
+            if (fp) {
+                for (int i = 0; i < numberOfChannels; i++) {
+                    fread(&r0t0Array[i].r0_cali_q24,
+                            sizeof(r0t0Array[i].r0_cali_q24), 1, fp);
+                    fread(&r0t0Array[i].t0_cali_q6,
+                            sizeof(r0t0Array[i].t0_cali_q6), 1, fp);
+                }
+                fclose(fp);
+            } else {
+                PAL_DBG(LOG_TAG, "Speaker not calibrated. Send safe values");
+                for (int i = 0; i < numberOfChannels; i++) {
+                    r0t0Array[i].r0_cali_q24 = MIN_RESISTANCE_SPKR_Q24;
+                    r0t0Array[i].t0_cali_q6 = SAFE_SPKR_TEMP_Q6;
+                }
+            }
+            spR0T0confg = (param_id_sp_th_vi_r0t0_cfg_t*)calloc(1,
+                                sizeof(param_id_sp_th_vi_r0t0_cfg_t) +
+                                sizeof(vi_r0t0_cfg_t) * numberOfChannels);
+
+            if (!spR0T0confg) {
+                PAL_ERR(LOG_TAG," unable to create speaker config payload\n");
+                goto free_fe;
+            }
+            spR0T0confg->num_ch = numberOfChannels;
+
+            for (int i = 0; i < numberOfChannels; i++) {
+                spR0T0confg->r0t0_cfg[i].r0_cali_q24 = r0t0Array[i].r0_cali_q24;
+                spR0T0confg->r0t0_cfg[i].t0_cali_q6 = r0t0Array[i].t0_cali_q6;
+                PAL_DBG (LOG_TAG,"R0 %x ", spR0T0confg->r0t0_cfg[i].r0_cali_q24);
+                PAL_DBG (LOG_TAG,"T0 %x ", spR0T0confg->r0t0_cfg[i].t0_cali_q6);
+
+            }
+
+            payloadSize = 0;
+            builder->payloadSPConfig(&payload, &payloadSize, miid,
+                    PARAM_ID_SP_TH_VI_R0T0_CFG,(void *)spR0T0confg);
+            if (payloadSize) {
+                ret = updateVICustomPayload(payload, payloadSize);
+                free(payload);
+                free(spR0T0confg);
+                if (0 != ret) {
+                    PAL_ERR(LOG_TAG," updateVICustomPayload Failed\n");
+                    ret = 0;
+                }
+            }
+
+            // Setting the values for VI module
+            if (customPayloadSize) {
+                ret = SessionAlsaUtils::setDeviceCustomPayload(rm, backEndName,
+                                viCustomPayload, viCustomPayloadSize);
+                if (ret) {
+                    PAL_ERR(LOG_TAG, "Unable to set custom param for mode");
+                    goto free_fe;
+                }
+            }
+#ifdef AUDIO_SUPPORT_AW882XX
+        // awinic add for sp begin
+        } // add this before pcm_open
+        // awinic add for sp end
+#endif
 
         txPcm = pcm_open(rm->getVirtualSndCard(), pcmDevIdTx.at(0), flags, &config);
         if (!txPcm) {
@@ -3442,6 +3470,30 @@ int SpeakerProtection::viTxSetupThreadLoop()
             PAL_ERR(LOG_TAG, "pcm start failed for TX path");
             goto err_pcm_open;
         }
+
+#ifdef AUDIO_SUPPORT_AW882XX
+        /*awinic add start*/
+        struct aw_dev_info dev_info;
+        int cali_re[8] = { 0 };
+
+        ret = aw_audioreach_get_re_from_file(cali_re, numberOfChannels);
+        if (ret < 0) {
+            PAL_ERR(LOG_TAG, "get re from file failed");
+            goto exit;
+        }
+
+        dev_info.virt_mixer = virtMixer;
+        dev_info.hw_mixer = hwMixer;
+
+        ret = aw_audioreach_dsp_set_re(&dev_info, cali_re, numberOfChannels);
+        if (ret < 0) {
+            PAL_ERR(LOG_TAG, "Awinic set cali re failed");
+            goto exit;
+        }
+
+        PAL_INFO(LOG_TAG, "Awinic set cali re success");
+        /*awinic add end*/
+#endif
 
         // Free up the local variables
         goto exit;
@@ -3527,6 +3579,11 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
     deviceMutex.lock();
 
     if (flag) {
+#ifdef AUDIO_SUPPORT_AW882XX
+        // awinic add for sp begin
+        if (isWsaAmp && spkrCalState == SPKR_CALIB_IN_PROGRESS) {
+        // awinic add for sp end
+#endif
         if (spkrCalState == SPKR_CALIB_IN_PROGRESS) {
             // Close the Graphs
             cv.notify_all();
@@ -3599,67 +3656,77 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
         sAttr.direction = PAL_AUDIO_INPUT_OUTPUT;
         // Configure device attribute
         // Setting up SP mode
-        rm->getBackendName(mDeviceAttr.id, backEndNameRx);
-        if (!strlen(backEndNameRx.c_str())) {
-            PAL_ERR(LOG_TAG, "Failed to obtain rx backend name for %d", mDeviceAttr.id);
-            goto exit;
-        }
-
-        dev = Device::getInstance(&mDeviceAttr, rm);
-
-        ret = rm->getActiveStream_l(activeStreams, dev);
-        if ((0 != ret) || (activeStreams.size() == 0)) {
-            PAL_ERR(LOG_TAG, " no active stream available");
-            ret = -EINVAL;
-            goto exit;
-        }
-
-        stream = static_cast<Stream *>(activeStreams[0]);
-        stream->getAssociatedSession(&session);
-
-        ret = session->getMIID(backEndNameRx.c_str(), MODULE_SP, &miid);
-        if (ret) {
-            PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", MODULE_SP, ret);
-            goto exit;
-        }
-
-        // Set the operation mode for SP module
-        PAL_DBG(LOG_TAG, "Operation mode for SP %d",
-                        rm->mSpkrProtModeValue.operationMode);
-        switch (rm->mSpkrProtModeValue.operationMode) {
-            case PAL_SP_MODE_FACTORY_TEST:
-                spModeConfg.operation_mode = FACTORY_TEST_MODE;
-            break;
-            case PAL_SP_MODE_V_VALIDATION:
-                spModeConfg.operation_mode = V_VALIDATION_MODE;
-            break;
-            default:
-                PAL_INFO(LOG_TAG, "Normal mode being used");
-                spModeConfg.operation_mode = NORMAL_MODE;
-        }
-
-        payloadSize = 0;
-        builder->payloadSPConfig(&payload, &payloadSize, miid,
-                PARAM_ID_SP_OP_MODE,(void *)&spModeConfg);
-        if (payloadSize) {
-            if (customPayload) {
-                free (customPayload);
-                customPayloadSize = 0;
-                customPayload = NULL;
+#ifdef AUDIO_SUPPORT_AW882XX
+        // awinic add for sp begin
+        if (isWsaAmp) { //add this before getBackendName
+        // awinic add for sp end
+#endif
+            rm->getBackendName(mDeviceAttr.id, backEndNameRx);
+            if (!strlen(backEndNameRx.c_str())) {
+                PAL_ERR(LOG_TAG, "Failed to obtain rx backend name for %d", mDeviceAttr.id);
+                goto exit;
             }
-            ret = updateCustomPayload(payload, payloadSize);
-            free(payload);
-            if (0 != ret) {
-                PAL_ERR(LOG_TAG," updateCustomPayload Failed\n");
-            }
-        }
 
-        /* CPS configures speaker payload so need to retain it in processing mode.
-         * */
-        // CPS related payload
-        if (ResourceManager::isCpsEnabled) {
-            updateCpsCustomPayload(miid);
+            dev = Device::getInstance(&mDeviceAttr, rm);
+
+            ret = rm->getActiveStream_l(activeStreams, dev);
+            if ((0 != ret) || (activeStreams.size() == 0)) {
+                PAL_ERR(LOG_TAG, " no active stream available");
+                ret = -EINVAL;
+                goto exit;
+            }
+
+            stream = static_cast<Stream *>(activeStreams[0]);
+            stream->getAssociatedSession(&session);
+
+            ret = session->getMIID(backEndNameRx.c_str(), MODULE_SP, &miid);
+            if (ret) {
+                PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", MODULE_SP, ret);
+                goto exit;
+            }
+
+            // Set the operation mode for SP module
+            PAL_DBG(LOG_TAG, "Operation mode for SP %d",
+                            rm->mSpkrProtModeValue.operationMode);
+            switch (rm->mSpkrProtModeValue.operationMode) {
+                case PAL_SP_MODE_FACTORY_TEST:
+                    spModeConfg.operation_mode = FACTORY_TEST_MODE;
+                break;
+                case PAL_SP_MODE_V_VALIDATION:
+                    spModeConfg.operation_mode = V_VALIDATION_MODE;
+                break;
+                default:
+                    PAL_INFO(LOG_TAG, "Normal mode being used");
+                    spModeConfg.operation_mode = NORMAL_MODE;
+            }
+
+            payloadSize = 0;
+            builder->payloadSPConfig(&payload, &payloadSize, miid,
+                    PARAM_ID_SP_OP_MODE,(void *)&spModeConfg);
+            if (payloadSize) {
+                if (customPayload) {
+                    free (customPayload);
+                    customPayloadSize = 0;
+                    customPayload = NULL;
+                }
+                ret = updateCustomPayload(payload, payloadSize);
+                free(payload);
+                if (0 != ret) {
+                    PAL_ERR(LOG_TAG," updateCustomPayload Failed\n");
+                }
+            }
+
+            /* CPS configures speaker payload so need to retain it in processing mode.
+             * */
+            // CPS related payload
+            if (ResourceManager::isCpsEnabled) {
+                updateCpsCustomPayload(miid);
+            }
+#ifdef AUDIO_SUPPORT_AW882XX
+        // awinic add for sp begin
         }
+        // awinic add for sp end
+#endif
         goto exit;
     }
     else {
@@ -3812,7 +3879,12 @@ int SpeakerProtection::start()
 
     if (ResourceManager::isVIRecordStarted) {
         PAL_DBG(LOG_TAG, "record running so just update SP payload");
-        updateSPcustomPayload();
+#ifdef AUDIO_SUPPORT_AW882XX
+        // awinic add for sp begin
+        if (isWsaAmp)
+            updateSPcustomPayload();
+        // awinic add for sp end
+#endif
     }
     else {
         if (ResourceManager::isSpeakerHandsetProtectionSeparate)
@@ -4246,7 +4318,11 @@ SpeakerFeedback::SpeakerFeedback(struct pal_device *device,
     memset(&mDeviceAttr, 0, sizeof(struct pal_device));
     memcpy(&mDeviceAttr, device, sizeof(struct pal_device));
     rm = Rm;
-
+#ifdef AUDIO_SUPPORT_AW882XX
+    // awinic add for sp begin
+    isWsaAmp = false;
+    // awinic add for sp end
+#endif
 
     rm->getDeviceInfo(mDeviceAttr.id, PAL_STREAM_PROXY, mDeviceAttr.custom_config.custom_key, &devinfo);
     numSpeaker = devinfo.channels;
@@ -4261,7 +4337,12 @@ int32_t SpeakerFeedback::start()
     ResourceManager::isVIRecordStarted = true;
     // Do the customPayload configuration for VI path and call the Device::start
     PAL_DBG(LOG_TAG," Feedback start\n");
-    updateVIcustomPayload();
+#ifdef AUDIO_SUPPORT_AW882XX
+    // awinic add for sp begin
+    if (isWsaAmp)
+        updateVIcustomPayload();
+    // awinic add for sp end
+#endif
     Device::start();
 
     return 0;
