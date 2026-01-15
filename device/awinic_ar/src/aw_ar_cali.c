@@ -16,7 +16,7 @@
 #define AW_CALI_RE_DEFAULT_TIMER    (3000)
 #define AW_CALI_F0_TIME             (5000 * 1000)
 
-#define AWINIC_CALI_FILE    "/mnt/vendor/persist/factory/audio/aw_cali.bin"
+#define AWINIC_CALI_FILE    "/mnt/vendor/persist/audio/aw_calr.bin"
 static bool g_is_single_cali = false;
 static unsigned int g_cali_re_time_ms = AW_CALI_RE_DEFAULT_TIMER;
 static unsigned int g_noise_flag = CALI_OPS_NOISE;
