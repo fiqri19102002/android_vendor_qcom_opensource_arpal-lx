@@ -117,7 +117,8 @@ cc_library_shared {
         "true": ["device/src/ECRefDevice.cpp"],
         default: [],
     }) + select(soong_config_variable("qtiaudio", "support_aw882xx"), {
-        "true": ["device/awinic_ar/src/aw_ar_dsp.cpp",
+        "true": ["device/awinic_ar/src/aw_ar_cali.c",
+                 "device/awinic_ar/src/aw_ar_dsp.cpp",
                  "device/awinic_ar/src/aw_ar_kmsg.c",
                  "device/awinic_ar/src/aw_ar_monitor.c"],
         default: [],
