@@ -3074,6 +3074,10 @@ int SpeakerProtection::viTxSetupThreadLoop()
     param_id_sp_ex_vi_mode_cfg_t viExModeConfg;
     PayloadBuilder* builder = new PayloadBuilder();
     struct pal_device rxDevAttr;
+#ifdef AUDIO_SUPPORT_AW882XX
+    struct aw_dev_info dev_info;
+    int cali_re[8];
+#endif
 
     PAL_DBG(LOG_TAG, "Enter: %s", __func__);
         rm = ResourceManager::getInstance();
@@ -3473,9 +3477,6 @@ int SpeakerProtection::viTxSetupThreadLoop()
 
 #ifdef AUDIO_SUPPORT_AW882XX
         /*awinic add start*/
-        struct aw_dev_info dev_info;
-        int cali_re[8] = { 0 };
-
         ret = aw_audioreach_get_re_from_file(cali_re, numberOfChannels);
         if (ret < 0) {
             PAL_ERR(LOG_TAG, "get re from file failed");

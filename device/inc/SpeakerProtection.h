@@ -115,6 +115,11 @@ protected :
     struct spDeviceInfo spDevInfo;
     void *viCustomPayload;
     size_t viCustomPayloadSize;
+#ifdef AUDIO_SUPPORT_AW882XX
+    // awinic add for sp begin
+    bool isWsaAmp;
+    // awinic add for sp end
+#endif
 
 private :
     static bool isSharedBE;

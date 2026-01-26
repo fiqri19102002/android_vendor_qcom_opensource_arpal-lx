@@ -106,7 +106,7 @@ int setEQParams(int speaker, int slot, unsigned char *data)
         return AW_FAIL;
     }
 
-    ret = aw_ar_dsp_write_eq(monitor->virt_mixer, speaker, slot);
+    ret = aw_ar_dsp_write_eq(dev_info.virt_mixer, speaker, slot);
     if (ret < 0) {
         AWLOGE("set setEQParams to dsp failed");
         return AW_FAIL;
