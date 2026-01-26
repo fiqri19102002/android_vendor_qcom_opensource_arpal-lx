@@ -3584,8 +3584,9 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
         // awinic add for sp begin
         if (isWsaAmp && spkrCalState == SPKR_CALIB_IN_PROGRESS) {
         // awinic add for sp end
-#endif
+#else
         if (spkrCalState == SPKR_CALIB_IN_PROGRESS) {
+#endif
             // Close the Graphs
             cv.notify_all();
             // Wait for cleanup
